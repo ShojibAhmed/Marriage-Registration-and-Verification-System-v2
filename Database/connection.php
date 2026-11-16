@@ -27,4 +27,7 @@ if (!$conn) {
 }
 
 mysqli_set_charset($conn, "utf8mb4");
+if (!mysqli_query($conn, "SET time_zone = '+06:00'")) {
+    die("Could not establish the application database time zone.");
+}
 ?>

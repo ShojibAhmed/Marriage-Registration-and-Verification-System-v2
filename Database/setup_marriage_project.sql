@@ -6,6 +6,7 @@
 
 CREATE DATABASE IF NOT EXISTS `marriage_project` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `marriage_project`;
+SET time_zone = '+06:00';
 
 -- --------------------------------------------------------
 -- 1. Table: admin_users (Minimal system audit)
@@ -45,12 +46,33 @@ CREATE TABLE IF NOT EXISTS `kazi_users` (
   `license_no` VARCHAR(50) NOT NULL UNIQUE,
   `status` ENUM('Active', 'Inactive') DEFAULT 'Active',
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `expires_at` DATETIME NOT NULL,
+  `last_renewed_at` DATETIME DEFAULT NULL,
   INDEX (`mobile_no`),
-  INDEX (`license_no`)
+  INDEX (`license_no`),
+  INDEX (`status`, `expires_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- --------------------------------------------------------
--- 4. Table: citizens (Bangladeshi NID and Foreign Passport records)
+-- 4. Table: kazi_account_history (Admin account actions)
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `kazi_account_history` (
+  `history_id` INT AUTO_INCREMENT PRIMARY KEY,
+  `kazi_id` INT NOT NULL,
+  `action_type` VARCHAR(24) NOT NULL,
+  `previous_status` VARCHAR(20) DEFAULT NULL,
+  `new_status` VARCHAR(20) DEFAULT NULL,
+  `previous_expiry` DATETIME DEFAULT NULL,
+  `new_expiry` DATETIME DEFAULT NULL,
+  `admin_id` INT DEFAULT NULL,
+  `action_at` DATETIME NOT NULL,
+  `reason` TEXT DEFAULT NULL,
+  INDEX (`kazi_id`, `action_at`),
+  INDEX (`admin_id`, `action_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- --------------------------------------------------------
+-- 5. Table: citizens (Bangladeshi NID and Foreign Passport records)
 -- --------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `citizens` (
   `citizen_id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -175,9 +197,21 @@ INSERT INTO `kazi_license_counters` (`district_prefix`, `last_serial`) VALUES
 ON DUPLICATE KEY UPDATE `last_serial` = VALUES(`last_serial`);
 
 -- Demo Kazi User (Mobile: 01711000111 | License: Dha_000001 | Password: password123)
-INSERT INTO `kazi_users` (`kazi_id`, `full_name`, `mobile_no`, `email`, `password`, `division`, `district`, `upazila`, `full_address`, `license_no`, `status`) VALUES
-(1, 'Kazi Maulana Abdul Mannan', '01711000111', 'kazi.mannan@example.com', '$2y$10$bf/f.eg9AFJMGmfshbV7eeI3K3bJDR3TO1i94eSfdcr45ShadPfyi', 'Dhaka', 'Dhaka', 'Dhanmondi', 'House 14, Road 5, Dhanmondi, Dhaka', 'Dha_000001', 'Active')
+SET @kazi_seed_created_at = CURRENT_TIMESTAMP();
+INSERT INTO `kazi_users` (`kazi_id`, `full_name`, `mobile_no`, `email`, `password`, `division`, `district`, `upazila`, `full_address`, `license_no`, `status`, `created_at`, `expires_at`, `last_renewed_at`) VALUES
+(1, 'Kazi Maulana Abdul Mannan', '01711000111', 'kazi.mannan@example.com', '$2y$10$bf/f.eg9AFJMGmfshbV7eeI3K3bJDR3TO1i94eSfdcr45ShadPfyi', 'Dhaka', 'Dhaka', 'Dhanmondi', 'House 14, Road 5, Dhanmondi, Dhaka', 'Dha_000001', 'Active', @kazi_seed_created_at,
+  CASE WHEN MONTH(@kazi_seed_created_at) = 2 AND DAY(@kazi_seed_created_at) = 29
+    THEN TIMESTAMP(DATE_ADD(DATE_ADD(DATE(@kazi_seed_created_at), INTERVAL 1 DAY), INTERVAL 1 YEAR), TIME(@kazi_seed_created_at))
+    ELSE DATE_ADD(@kazi_seed_created_at, INTERVAL 1 YEAR)
+  END,
+  NULL)
 ON DUPLICATE KEY UPDATE `full_name` = VALUES(`full_name`);
+
+INSERT INTO `kazi_account_history` (`kazi_id`, `action_type`, `previous_status`, `new_status`, `previous_expiry`, `new_expiry`, `admin_id`, `action_at`, `reason`)
+SELECT `kazi_id`, 'registered', NULL, 'Active', NULL, `expires_at`, NULL, `created_at`, 'Demo account seeded'
+FROM `kazi_users`
+WHERE `kazi_id` = 1
+  AND NOT EXISTS (SELECT 1 FROM `kazi_account_history` WHERE `kazi_id` = 1 AND `action_type` = 'registered');
 
 -- Demo Citizens (Bangladeshi: 11-digit mobile, eligible ages)
 INSERT INTO `citizens` (`citizen_id`, `citizen_type`, `full_name`, `father_name`, `mother_name`, `date_of_birth`, `gender`, `religion`, `national_id`, `passport_no`, `nationality`, `mobile_no`, `division`, `district`, `upazila`, `full_address`, `created_by_kazi_id`) VALUES

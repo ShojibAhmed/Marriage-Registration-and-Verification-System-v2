@@ -1,10 +1,15 @@
 <?php
 session_start();
+require_once "includes/security.php";
 
 // If Kazi is logged in, redirect directly to Kazi dashboard
-if (isset($_SESSION['kazi_id'])) {
-    header("Location: kazi/dashboard.php");
-    exit();
+try {
+    if (is_current_kazi_session()) {
+        header("Location: kazi/dashboard.php");
+        exit();
+    }
+} catch (Throwable $exception) {
+    clear_kazi_session();
 }
 
 // If Admin is logged in, redirect to admin dashboard

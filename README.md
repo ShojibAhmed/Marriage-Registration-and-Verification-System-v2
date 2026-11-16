@@ -51,6 +51,14 @@ http://localhost/Marriage_Project/Database/setup.php
 
 > **Safety Notice:** This project strictly uses its own database (`marriage_project`). It never connects to, modifies, or overwrites any other database.
 
+### Kazi Account Management Migration
+
+Back up the live `marriage_project` database before applying `Database/kazi_account_management_migration.sql`. This migration is separate from the setup and general migration scripts; review the live schema before running it because existing installations may differ from the checked-in schema files.
+
+The migration sets its database session to `+06:00` (Asia/Dhaka), adds nullable expiry fields and the account history table, then backfills expiry from each original `created_at`. It does not update `created_at`. Review the verification query and require `missing_expiry_count = 0` before optionally running the commented `NOT NULL` alteration. Do not run this migration through the general setup page.
+
+Application account timestamps use the `Asia/Dhaka` timezone. Protected Kazi requests re-check the account’s manual status and expiry against the database. Renewal extends from the later of current expiry or renewal time; reactivation does not extend expiry and is rejected until an expired account has been renewed.
+
 ---
 
 ## 🔑 Default Credentials for Demonstration

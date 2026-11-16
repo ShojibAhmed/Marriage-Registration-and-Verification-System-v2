@@ -119,10 +119,18 @@ try {
     // Format: e.g. Dha_000001, Chu_000001
     $generated_license = sprintf("%s_%06d", $prefix, $serial);
 
-    // Insert Kazi record — standard mobile_no column
-    $ins_kazi = mysqli_prepare($conn, "INSERT INTO `kazi_users` (full_name, mobile_no, email, password, division, district, upazila, full_address, license_no, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')");
-    mysqli_stmt_bind_param($ins_kazi, "sssssssss", $full_name, $mobile_no, $email, $hashed_password, $division, $district, $upazila, $full_address, $generated_license);
+    $registration_time = new DateTimeImmutable('now', application_timezone());
+    $created_at = $registration_time->format('Y-m-d H:i:s');
+    $expires_at = kazi_add_one_calendar_year($registration_time)->format('Y-m-d H:i:s');
+
+    $ins_kazi = mysqli_prepare($conn, "INSERT INTO `kazi_users` (full_name, mobile_no, email, password, division, district, upazila, full_address, license_no, status, created_at, expires_at, last_renewed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, ?, NULL)");
+    mysqli_stmt_bind_param($ins_kazi, "sssssssssss", $full_name, $mobile_no, $email, $hashed_password, $division, $district, $upazila, $full_address, $generated_license, $created_at, $expires_at);
     mysqli_stmt_execute($ins_kazi);
+
+    $kazi_id = mysqli_insert_id($conn);
+    $history_stmt = mysqli_prepare($conn, "INSERT INTO kazi_account_history (kazi_id, action_type, previous_status, new_status, previous_expiry, new_expiry, admin_id, action_at, reason) VALUES (?, 'registered', NULL, 'Active', NULL, ?, NULL, ?, 'Self-registration')");
+    mysqli_stmt_bind_param($history_stmt, "iss", $kazi_id, $expires_at, $created_at);
+    mysqli_stmt_execute($history_stmt);
 
     mysqli_commit($conn);
     unset($_SESSION['kazi_signup_old']);

@@ -8,6 +8,153 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+function application_timezone() {
+    static $timezone = null;
+    if ($timezone === null) {
+        $timezone = new DateTimeZone('Asia/Dhaka');
+    }
+    return $timezone;
+}
+
+function kazi_add_one_calendar_year(DateTimeImmutable $date) {
+    $year = (int)$date->format('Y') + 1;
+    $month = (int)$date->format('n');
+    $day = (int)$date->format('j');
+
+    if ($month === 2 && $day === 29 && !checkdate(2, 29, $year)) {
+        return $date->setDate($year, 3, 1);
+    }
+
+    return $date->setDate($year, $month, $day);
+}
+
+function kazi_date_time($value) {
+    if ($value instanceof DateTimeInterface) {
+        return DateTimeImmutable::createFromInterface($value)->setTimezone(application_timezone());
+    }
+    return new DateTimeImmutable((string)$value, application_timezone());
+}
+
+function clear_kazi_session() {
+    unset(
+        $_SESSION['kazi_id'],
+        $_SESSION['kazi_name'],
+        $_SESSION['license_no'],
+        $_SESSION['mobile_no'],
+        $_SESSION['division'],
+        $_SESSION['district'],
+        $_SESSION['upazila']
+    );
+}
+
+function clear_admin_session() {
+    unset(
+        $_SESSION['admin_id'],
+        $_SESSION['admin_username'],
+        $_SESSION['admin_name'],
+        $_SESSION['admin_role']
+    );
+}
+
+function database_connection() {
+    global $conn;
+    if (!isset($conn) || !$conn) {
+        require_once __DIR__ . '/../Database/connection.php';
+    }
+    return $conn;
+}
+
+function current_kazi_account() {
+    if (empty($_SESSION['kazi_id'])) {
+        return null;
+    }
+
+    $conn = database_connection();
+    $stmt = mysqli_prepare($conn, "SELECT kazi_id, full_name, mobile_no, license_no, division, district, upazila, status, created_at, expires_at FROM kazi_users WHERE kazi_id = ? LIMIT 1");
+    if (!$stmt) {
+        throw new RuntimeException('Unable to prepare Kazi account validation.');
+    }
+
+    $kazi_id = (int)$_SESSION['kazi_id'];
+    mysqli_stmt_bind_param($stmt, "i", $kazi_id);
+    if (!mysqli_stmt_execute($stmt)) {
+        mysqli_stmt_close($stmt);
+        throw new RuntimeException('Unable to validate Kazi account.');
+    }
+
+    $account = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt)) ?: null;
+    mysqli_stmt_close($stmt);
+    return $account;
+}
+
+function kazi_account_is_valid(array $account, ?DateTimeImmutable $now = null) {
+    if (($account['status'] ?? null) !== 'Active') {
+        return false;
+    }
+
+    $created_at = kazi_date_time($account['created_at']);
+    $expires_at = !empty($account['expires_at'])
+        ? kazi_date_time($account['expires_at'])
+        : kazi_add_one_calendar_year($created_at);
+    $current_time = $now ?: new DateTimeImmutable('now', application_timezone());
+
+    return $current_time < $expires_at;
+}
+
+function is_current_kazi_session() {
+    if (empty($_SESSION['kazi_id'])) {
+        return false;
+    }
+
+    try {
+        $account = current_kazi_account();
+        if (!$account || !kazi_account_is_valid($account)) {
+            clear_kazi_session();
+            return false;
+        }
+
+        $_SESSION['kazi_name'] = $account['full_name'];
+        $_SESSION['license_no'] = $account['license_no'];
+        $_SESSION['mobile_no'] = $account['mobile_no'];
+        $_SESSION['division'] = $account['division'];
+        $_SESSION['district'] = $account['district'];
+        $_SESSION['upazila'] = $account['upazila'];
+        return true;
+    } catch (Throwable $exception) {
+        clear_kazi_session();
+        error_log('Kazi session validation failed: ' . $exception->getMessage());
+        throw $exception;
+    }
+}
+
+function is_current_admin_session() {
+    if (empty($_SESSION['admin_id'])) {
+        return false;
+    }
+
+    $conn = database_connection();
+    $stmt = mysqli_prepare($conn, "SELECT status FROM admin_users WHERE admin_id = ? LIMIT 1");
+    if (!$stmt) {
+        throw new RuntimeException('Unable to prepare Admin account validation.');
+    }
+
+    $admin_id = (int)$_SESSION['admin_id'];
+    mysqli_stmt_bind_param($stmt, "i", $admin_id);
+    if (!mysqli_stmt_execute($stmt)) {
+        mysqli_stmt_close($stmt);
+        throw new RuntimeException('Unable to validate Admin account.');
+    }
+
+    $admin = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    mysqli_stmt_close($stmt);
+
+    if (!$admin || $admin['status'] !== 'Active') {
+        clear_admin_session();
+        return false;
+    }
+    return true;
+}
+
 /**
  * Generate or retrieve the active CSRF token.
  */
@@ -58,16 +205,60 @@ function validate_person_name($name) {
 }
 
 /**
- * Require Kazi session authorization.
+ * Require current Kazi account authorization on every protected request.
  */
-function require_kazi_auth() {
+function require_kazi_auth($response_type = 'html', $login_url = '../kazi/login.php') {
     if (session_status() === PHP_SESSION_NONE) {
         session_start();
     }
-    if (!isset($_SESSION['kazi_id']) || empty($_SESSION['kazi_id'])) {
-        header("Location: ../kazi/login.php");
+
+    try {
+        if (is_current_kazi_session()) {
+            return;
+        }
+    } catch (Throwable $exception) {
+        if ($response_type === 'json') {
+            http_response_code(503);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['success' => false, 'error' => 'Authentication service unavailable.']);
+        } else {
+            http_response_code(503);
+            echo 'Authentication service unavailable.';
+        }
         exit();
     }
+
+    clear_kazi_session();
+    if ($response_type === 'json') {
+        http_response_code(401);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+        exit();
+    }
+
+    header("Location: " . $login_url);
+    exit();
+}
+
+function require_admin_auth($login_url = 'login.php') {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
+    try {
+        if (is_current_admin_session()) {
+            return;
+        }
+    } catch (Throwable $exception) {
+        error_log('Admin session validation failed: ' . $exception->getMessage());
+        http_response_code(503);
+        echo 'Authentication service unavailable.';
+        exit();
+    }
+
+    clear_admin_session();
+    header("Location: " . $login_url);
+    exit();
 }
 
 /**

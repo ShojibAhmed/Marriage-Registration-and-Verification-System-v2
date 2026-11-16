@@ -1,12 +1,16 @@
 <?php
 session_start();
-
-if (isset($_SESSION['kazi_id'])) {
-    header("Location: dashboard.php");
-    exit();
-}
-
+require_once "../Database/connection.php";
 require_once "../includes/security.php";
+
+try {
+    if (is_current_kazi_session()) {
+        header("Location: dashboard.php");
+        exit();
+    }
+} catch (Throwable $exception) {
+    clear_kazi_session();
+}
 
 $error = $_SESSION['kazi_login_error'] ?? '';
 $old_mobile = $_SESSION['kazi_login_mobile'] ?? '';

@@ -1,7 +1,21 @@
 <?php
+session_start();
 require_once "../Database/connection.php";
+require_once "../includes/security.php";
 
-$reg_no = trim($_GET['reg'] ?? ($_GET['registration_number'] ?? ''));
+if (!empty($_SESSION['kazi_id'])) {
+    require_kazi_auth('html', '../kazi/login.php');
+} elseif (!empty($_SESSION['admin_id'])) {
+    require_admin_auth('../admin/login.php');
+} else {
+    header("Location: ../kazi/login.php");
+    exit();
+}
+
+$raw_reg_no = $_GET['reg'] ?? ($_GET['registration_number'] ?? '');
+$reg_no = is_string($raw_reg_no) ? trim($raw_reg_no) : '';
+header('Cache-Control: private, no-store, max-age=0');
+header('X-Content-Type-Options: nosniff');
 
 if (empty($reg_no)) {
     die("<div style='font-family: Arial, sans-serif; text-align: center; margin-top: 50px;'><h3>নিবন্ধন নম্বর আবশ্যক</h3><p>অনুগ্রহ করে একটি সঠিক বিবাহ নিবন্ধন নম্বর প্রদান করুন।</p></div>");

@@ -6,14 +6,10 @@
 
 header('Content-Type: application/json');
 session_start();
-
-if (!isset($_SESSION['kazi_id'])) {
-    echo json_encode(['success' => false, 'error' => 'Unauthorized']);
-    exit();
-}
+require_once "../includes/security.php";
+require_kazi_auth('json');
 
 require_once "../Database/connection.php";
-require_once "../includes/security.php";
 
 $type = trim($_GET['type'] ?? 'NID'); // 'NID' or 'Passport'
 $query = trim($_GET['identifier'] ?? '');

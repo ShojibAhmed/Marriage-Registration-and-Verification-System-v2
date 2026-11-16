@@ -1,12 +1,18 @@
 <?php
 session_start();
-if (isset($_SESSION['kazi_id'])) {
-    header("Location: dashboard.php");
-    exit();
+require_once "../Database/connection.php";
+require_once "../includes/security.php";
+
+try {
+    if (is_current_kazi_session()) {
+        header("Location: dashboard.php");
+        exit();
+    }
+} catch (Throwable $exception) {
+    clear_kazi_session();
 }
 
 require_once "../config/bangladesh_geo.php";
-require_once "../includes/security.php";
 
 $error = $_SESSION['kazi_signup_error'] ?? '';
 $old = $_SESSION['kazi_signup_old'] ?? [];

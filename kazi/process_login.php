@@ -35,7 +35,7 @@ if (!validate_bd_mobile($mobile_no)) {
 }
 
 // Direct query using standard schema column mobile_no
-$sql = "SELECT kazi_id, full_name, mobile_no, email, password, division, district, upazila, license_no, status FROM `kazi_users` WHERE mobile_no = ? AND license_no = ? LIMIT 1";
+$sql = "SELECT kazi_id, full_name, mobile_no, email, password, division, district, upazila, license_no, status, created_at, expires_at FROM `kazi_users` WHERE mobile_no = ? AND license_no = ? LIMIT 1";
 $stmt = mysqli_prepare($conn, $sql);
 if (!$stmt) {
     $_SESSION['kazi_login_error'] = "সিস্টেম ত্রুটি: তথ্য যাচাই করা সম্ভব হচ্ছে না। প্রশাসকের সাথে যোগাযোগ করুন।";
@@ -47,13 +47,7 @@ mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 
 if ($kazi = mysqli_fetch_assoc($result)) {
-    if ($kazi['status'] !== 'Active') {
-        $_SESSION['kazi_login_error'] = "আপনার কাজী অ্যাকাউন্টটি নিষ্ক্রিয় অবস্থায় রয়েছে। প্রশাসকের সাথে যোগাযোগ করুন।";
-        header("Location: login.php");
-        exit();
-    }
-
-    if (password_verify($password, $kazi['password'])) {
+    if (kazi_account_is_valid($kazi) && password_verify($password, $kazi['password'])) {
         // Regenerate session ID for security
         session_regenerate_id(true);
 
@@ -69,13 +63,9 @@ if ($kazi = mysqli_fetch_assoc($result)) {
 
         header("Location: dashboard.php");
         exit();
-    } else {
-        $_SESSION['kazi_login_error'] = "ভুল পাসওয়ার্ড দেওয়া হয়েছে।";
-        header("Location: login.php");
-        exit();
     }
-} else {
-    $_SESSION['kazi_login_error'] = "এই মোবাইল নম্বর ও লাইসেন্স নম্বরের কোনো কাজী অ্যাকাউন্ট পাওয়া যায়নি।";
-    header("Location: login.php");
-    exit();
 }
+
+$_SESSION['kazi_login_error'] = "লগইন তথ্য সঠিক নয় অথবা অ্যাকাউন্টটি ব্যবহারযোগ্য নয়।";
+header("Location: login.php");
+exit();

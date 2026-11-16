@@ -152,7 +152,7 @@ if (!$record = mysqli_fetch_assoc($res)) {
             <tr>
                 <td class="label-col">Supporting Legal Document</td>
                 <td colspan="3">
-                    <a href="../<?= htmlspecialchars($record['supporting_document']) ?>" target="_blank" style="color: #0d6efd; font-weight: 600;">
+                    <a href="download_document.php?ref=<?= urlencode($record['case_reference']) ?>" target="_blank" style="color: #0d6efd; font-weight: 600;">
                         <i class="fa-solid fa-file-pdf me-1"></i> View Uploaded Document
                     </a>
                 </td>
